@@ -1,0 +1,54 @@
+
+library(pheatmap)
+library(stringr)
+library("qusage")
+library("readxl")
+source("List2Matrix.r")
+source("myGSEA.r")
+
+path_root     <- paste0(getwd(), "/")
+
+path_msigdb   <- "/Users/yu.liv/Resource/MSigDB/"
+reactome      <- "c2.cp.reactome.v7.4.symbols.gmt"
+geneset_list  <- read.gmt(paste0(path_msigdb, reactome))
+genes         <- unique(unlist(geneset_list))
+geneset_matrix<- List2Matrix(geneset_list, uniGene=genes ) 
+
+get_genes <- function(fam) {
+  fam_var  <- read.csv(paste0(path_root,fam,"/dipr_20230228_cases_filtered_vars_",fam,".csv"), header=T) 
+  fam_varb <- fam_var[fam_var$variant_type != "synonymous",]
+  gene_list<- unique(fam_varb$gene_name)
+  fam_name <- rep(fam, length(gene_list))
+  data.frame(gene_list, fam_name)
+}
+
+gene_fam156107 <- get_genes("FAM156107")
+gene_fam165540 <- get_genes("FAM165540")
+gene_fam165382 <- get_genes("FAM165382")
+
+gene_fam  <- rbind(gene_fam156107,gene_fam165540,gene_fam165382)
+gene_fam_list <- split(gene_fam$gene_list, gene_fam$fam_name) 
+gene_fam_matrix <- List2Matrix(gene_fam_list, uniGene=genes ) 
+
+gsea_res <- myGSEA(gene_fam_matrix, geneSets=geneset_matrix, cutoff=0.05)
+write.csv(gsea_res, file="reactome_GSEA_results.csv")
+
+kg <- read.csv("/Users/yu.liv/Resource/PrimeKG/kg.csv", header=T)
+disease_proteins1 <- kg[kg$relation == "disease_protein" & kg$x_type == "gene/protein", c("x_name","y_name") ]
+phenotype_protein1 <- kg[kg$relation == "phenotype_protein" & kg$x_type == "gene/protein", c("x_name","y_name") ]
+protein_relation <- rbind(disease_proteins1, phenotype_protein1)
+dim(protein_relation)
+protein_relation_list <- split(protein_relation$x_name, protein_relation$y_name )
+genes <- unique(protein_relation$x_name)
+protein_relation_matrix <- List2Matrix(protein_relation_list, uniGene=genes )
+gene_fam_matrix <- List2Matrix(gene_fam_list, uniGene=genes)
+gsea_res <- myGSEA(gene_fam_matrix, geneSets=protein_relation_matrix, cutoff=0.05) 
+write.csv(gsea_res, file="disease_kg_GSEA_results.csv")
+
+disease_gene_list  <- read.gmt("/Users/yu.liv/Resource/orphadata/orphandata_disease_gene.gmt") 
+genes <- unique(unlist(disease_gene_list))
+disease_gene_matrix <- List2Matrix(disease_gene_list, uniGene=genes)
+gene_fam_matrix <- List2Matrix(gene_fam_list, uniGene=genes)
+gsea_res <- myGSEA(gene_fam_matrix, geneSets=disease_gene_matrix, cutoff=0.05)
+write.csv(gsea_res, file="disease_orphandata_GSEA_results.csv")
+
