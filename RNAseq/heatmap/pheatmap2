@@ -1,0 +1,47 @@
+
+library(pheatmap)
+library(dendextend)
+
+cal_z_score <- function(x){
+  (x - mean(x)) / sd(x)
+}
+
+example_file <- "TagSeqExample.tab"
+data <- read.delim(example_file, header=T, row.names="gene")
+head(data)
+dim(data)
+data_subset <- as.matrix(data[rowSums(data)>50000,])
+dim(data_subset)
+pheatmap(data_subset)
+
+data_subset_norm <- t(apply(data_subset, 1, cal_z_score))
+pheatmap(data_subset_norm)
+
+my_hclust_gene <- hclust(dist(data_subset), method = "complete")
+as.dendrogram(my_hclust_gene) %>%
+  plot(horiz = TRUE)
+
+my_gene_col <- cutree(tree = as.dendrogram(my_hclust_gene), k = 2)
+my_gene_col <- data.frame(cluster = ifelse(test = my_gene_col == 1, yes = "cluster 1", no = "cluster 2"))
+ 
+head(my_gene_col)
+set.seed(1984)
+my_random <- as.factor(sample(x = 1:2, size = nrow(my_gene_col), replace = TRUE))
+my_gene_col$random <- my_random
+ 
+head(my_gene_col)
+
+my_sample_col <- data.frame(sample = rep(c("tumour", "normal"), c(4,2)))
+row.names(my_sample_col) <- colnames(data_subset)
+
+pheatmap(data_subset, annotation_row = my_gene_col, annotation_col = my_sample_col)
+pheatmap(data_subset,
+         annotation_row = my_gene_col,
+         annotation_col = my_sample_col,
+         cutree_rows = 2,
+         cutree_cols = 2)
+
+
+
+
+
