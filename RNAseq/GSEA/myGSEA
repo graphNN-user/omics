@@ -1,0 +1,131 @@
+
+#source("myRfunction/getMsigDB.r")
+library("doMC")
+library("foreach")
+  registerDoMC(10)
+##############################################
+######################################for boolean, fisher.test for enrichment(one direction)
+######################################for continous, ranksum test can be either directions.
+myGSEA<-function(profileM,geneSets,geneSetName="canonical",cutoff=0.01,direction=c("both","pos","neg"))
+{
+  #####profileM can be boolean matrix as input
+  mode(profileM)<-"numeric" 
+ # profileM<-profileM[,setdiff(colnames(profileM),"averagelogp"),drop=FALSE];
+ # rownames(profileM)<-sub("_Expr|_Mut|_CN","",rownames(profileM));
+  if(all(as.vector(profileM)%in%c(0,1,NA))){
+    print("query profile is boolean variable")
+    boolean<-TRUE}
+  else{
+      print("query profile is continous variable")
+      boolean<-FALSE}
+ if(missing(geneSets))geneSets<-getMsigDB(geneSetName);
+ subset<-intersect(rownames(geneSets),rownames(profileM));
+ profileM<-profileM[subset,,drop=FALSE]
+ geneSets<-geneSets[subset,,drop=FALSE]
+ P<-matrix(NA,ncol(profileM),ncol(geneSets),dimnames=list(colnames(profileM),colnames(geneSets)))
+
+P<-foreach(setIndex = 1:ncol(geneSets))%dopar%
+ {
+   
+   if(setIndex%%100==0)print(paste(setIndex,"genesets"))
+   p<-rep(NA,ncol(profileM))
+  for(profileIndex in 1:ncol(profileM))
+  {
+  if(boolean)
+    {
+  p[profileIndex]<--log10(as.numeric(try(fisher.test(profileM[,profileIndex],geneSets[,setIndex],alternative="greater")$p.value,silent=TRUE)))
+  }else {
+  a<-profileM[which(geneSets[,setIndex]==1),profileIndex]
+  b<-profileM[which(geneSets[,setIndex]==0),profileIndex]
+  a<-a[!is.na(a)]
+  b<-b[!is.na(b)]
+  if(direction=="pos")
+    { p[profileIndex]<--log10(as.numeric(try(wilcox.test(a,b,alternative="greater")$p.value,silent=TRUE)))
+    }else{
+  if(direction=="neg")
+    { p[profileIndex]<--log10(as.numeric(try(wilcox.test(a,b,alternative="less")$p.value,silent=TRUE)))
+    }else{
+     m<--log10(as.numeric(try(wilcox.test(a,b,alternative="greater")$p.value,silent=TRUE)))
+     n<--log10(as.numeric(try(wilcox.test(a,b,alternative="less")$p.value,silent=TRUE)))
+  p[profileIndex]<-ifelse(m>n,m,-n)
+   }
+}
+}
+}#end for
+p;
+ }#end foreach
+P<-t(do.call("rbind",P))
+print(dim(P))
+ 
+  colnames(P)<-colnames(geneSets)
+  rownames(P)<-colnames(profileM)
+ colnames(P)<-paste(colnames(P),"(",colSums(geneSets,na.rm=TRUE),")")
+ ####select only these significant ones
+subRow<-which(rowSums(abs(P)>(-log10(cutoff)),na.rm=TRUE)>0);
+subCol<-which(colSums(abs(P)>(-log10(cutoff)),na.rm=TRUE)>0);
+P<-P[subRow,subCol,drop=F]
+P<-t(P);
+P<-cbind(P,averagelogp10=apply(P,1,mean,na.rm=TRUE))
+P[order(P[,"averagelogp10"],decreasing=TRUE),,drop=FALSE]
+}
+
+
+
+
+######################################################################################################KStest instead of wilcox test
+myGSEAKS<-function(profileM,geneSets,geneSetName="canonical",cutoff=0.01,direction=c("both","pos","neg"))
+{
+  #####profileM can be boolean matrix as input
+  mode(profileM)<-"numeric" 
+ # profileM<-profileM[,setdiff(colnames(profileM),"averagelogp"),drop=FALSE];
+ # rownames(profileM)<-sub("_Expr|_Mut|_CN","",rownames(profileM));
+  if(all(as.vector(profileM)%in%c(0,1,NA))){
+    print("query profile is boolean variable")
+    boolean<-TRUE}
+  else{
+      print("query profile is continous variable")
+      boolean<-FALSE}
+
+ if(missing(geneSets))geneSets<-getMsigDB(geneSetName);
+ subset<-intersect(rownames(geneSets),rownames(profileM));
+ profileM<-profileM[subset,,drop=FALSE]
+ geneSets<-geneSets[subset,,drop=FALSE]
+ P<-matrix(NA,ncol(profileM),ncol(geneSets),dimnames=list(colnames(profileM),colnames(geneSets)))
+ for(setIndex in 1:ncol(geneSets))
+ {
+   
+   if(setIndex%%100==0)print(paste(setIndex,"genesets"))
+  for(profileIndex in 1:ncol(profileM))
+  {
+  if(boolean)
+    {
+  P[profileIndex,setIndex]<--log(as.numeric(try(fisher.test(profileM[,profileIndex],geneSets[,setIndex],alternative="greater")$p.value,silent=TRUE)))
+  }else {
+  a<-profileM[which(geneSets[,setIndex]==1),profileIndex]
+  b<-profileM[which(geneSets[,setIndex]==0),profileIndex]
+  a<-a[!is.na(a)]
+  b<-b[!is.na(b)]
+  if(direction=="pos")
+    { P[profileIndex,setIndex]<--log(as.numeric(try(ks.test(a,b,alternative="less")$p.value,silent=TRUE)))
+    }else{
+  if(direction=="neg")
+    { P[profileIndex,setIndex]<--log(as.numeric(try(ks.test(a,b,alternative="great")$p.value,silent=TRUE)))
+    }else{  
+  P[profileIndex,setIndex]<--log(as.numeric(try(ks.test(abs(a),abs(b),alternative="greater")$p.value,silent=TRUE)))
+ }
+}
+}
+}#end for
+ }#end for
+ 
+ colnames(P)<-paste(colnames(P),"(",colSums(geneSets),")")
+ ####select only these significant ones
+subRow<-which(rowSums(abs(P)>(-log(cutoff)),na.rm=TRUE)>0);
+subCol<-which(colSums(abs(P)>(-log(cutoff)),na.rm=TRUE)>0);
+P<-P[subRow,subCol,drop=F]
+P<-t(P);
+P<-cbind(P,averagelogp=apply(P,1,mean,na.rm=TRUE))
+P[order(abs(P[,"averagelogp"]),decreasing=TRUE),]
+}
+
+
