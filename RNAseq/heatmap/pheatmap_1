@@ -1,0 +1,38 @@
+
+library(pheatmap)
+
+cal_z_score <- function(x){  (x - mean(x)) / sd(x)}
+
+save_pheatmap_png <- function(x, filename, width=1200, height=1000, res = 150) {
+  png(filename, width = width, height = height, res = res)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+ 
+exprM <- readRDS("GSE135251_log2TPM.rds")
+patinfo <- read.csv("pat_info2.csv", header=T, row.names=1)
+table(patinfo$disease_group)
+nafld <- rownames(patinfo[patinfo$disease_group == "NAFLD",])
+exprM2 <- exprM[, colnames(exprM) %in% nafld]
+var1   <- apply(exprM2, 1, var)
+var2   <- var1[rev(order(var1))]
+var3   <- var2[1:1000]
+genes  <- names(var3) 
+exprM3 <- exprM2[rownames(exprM2) %in% genes,]
+exprM4 <- t(apply(exprM3, 1, cal_z_score))
+dim(exprM4)
+patinfo2 <- patinfo[rownames(patinfo) %in% nafld,c("nas_score","fibrosis_stage","disease_stage","pat_group")]
+
+myheatmap1 <- pheatmap(exprM4, main="h_cluster", annotation_col=patinfo2, show_colnames = F, show_rownames = F, color = (c("#0000FF","#4040FF","#8080FF","#C0C0FF","#FFFFFF","#FFC0C0","#FF8080","#FF4040","#FF0000")),breaks=seq(-6.75,6.75,1.5)) 
+save_pheatmap_png(myheatmap1, "hcluster.png")
+
+x=pheatmap:::scale_rows(exprM4)
+k=kmeans(t(x),3,iter.max = 10000)
+
+y2=k$cluster
+patinfo2$pat_group2 <- c("noNAFL","NAFL")[1+ as.numeric(patinfo2$pat_group == "NAFL")]
+patinfo2$kmeans <- y2
+myheatmap2 <- pheatmap(x[,order(y2)],cluster_cols = F,main="kmeans_cluster",show_rownames=F,show_colnames=F,annotation_col=patinfo2,color = (c("#0000FF","#4040FF","#8080FF","#C0C0FF","#FFFFFF","#FFC0C0","#FF8080","#FF4040","#FF0000")),breaks=seq(-6.75,6.75,1.5)) 
+save_pheatmap_png(myheatmap2, "kmean_cluster.png")
+
