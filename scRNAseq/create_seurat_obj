@@ -1,0 +1,29 @@
+
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+sample_list <- c("ERR3379692_apoptotic","ERR3379693_healthy","ERR3379695_proapoptotic" )
+h5_files = paste0(sample_list, "/filtered_feature_bc_matrix.h5") 
+i = 1
+sobj_list     <- list()
+for (h5_file in h5_files) {
+  count_data  <- Read10X_h5(filename = h5_file)
+  seurat_obj  <- CreateSeuratObject(counts = count_data, project=sample_list[i] , min.cells = 3, min.features = 250)
+  sobj_list <- append(sobj_list, seurat_obj)
+  i = i+1
+}
+
+merged_seurat <- merge(x = sobj_list[[1]], y = sobj_list[2:length(sobj_list)], add.cell.ids = as.vector(sample_list))
+merged_seurat$mitoRatio <- PercentageFeatureSet(object = merged_seurat, pattern = "^MT-")
+merged_seurat$mitoRatio <- merged_seurat@meta.data$mitoRatio / 100
+
+metadata <- merged_seurat@meta.data
+theme_set(theme_minimal() )
+p1 <- metadata %>% ggplot(aes(x=orig.ident, fill=orig.ident )) + geom_bar() + ggtitle("Number of Cells")
+p2 <- metadata %>% ggplot(aes(color=orig.ident, x=nCount_RNA )) + geom_density(alpha = 0.2) + scale_x_log10() + ggtitle("nCount density") 
+p3 <- metadata %>% ggplot(aes(color=orig.ident , x=nFeature_RNA )) + geom_density(alpha = 0.2) + scale_x_log10()+ggtitle("nFeature density")
+p4 <-  metadata %>% ggplot(aes(x=nCount_RNA, y=nFeature_RNA, color=mitoRatio)) + geom_point() + scale_colour_gradient(low = "gray90", high = "black") + stat_smooth(method=lm) + scale_x_log10() + scale_y_log10() + facet_wrap(~orig.ident )
+
+
+
