@@ -1,0 +1,31 @@
+
+
+List2Matrix<-function(vList,uniGene=NULL)
+{
+if(is.null(names(vList)))stop("input List should have names")
+for(i in 1:length(vList)) vList[[i]]<-as.character(vList[[i]])
+
+if(is.null(uniGene)){uniGene<-unique(unlist(vList))
+}else{uniGene<-as.character(uniGene)}
+uniM<-matrix(FALSE,length(uniGene),length(vList),dimnames=list(uniGene,names(vList)))
+
+for(i in names(vList))
+{
+
+ uniM[rownames(uniM)%in%vList[[i]],i]<-T;
+
+}
+
+uniM;
+}
+
+
+
+#######chang logic matrix format into a list
+
+Matrix2List<-function(m)
+  {
+    l<-lapply(1:ncol(m),function(i)rownames(m)[which(m[,i]==TRUE)])
+    names(l)<-colnames(m)
+    l;
+  }
