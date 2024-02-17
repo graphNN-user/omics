@@ -1,0 +1,24 @@
+
+
+library("pathwayPCA")
+library(UCell)
+source("create_seuratobj.R")
+source("filter_doublet_low_quality.R") 
+
+#seurat_obj imported from filter_doublet_low_quality.R
+
+gs  <-  read_gmt("c2_kegg2.gmt",  description = TRUE)
+gs_list <- gs$pathways
+names(gs_list) <- gs$TERMS
+
+add_score <- function(sobj0, gs0) {
+  sobj0 <-  AddModuleScore_UCell(sobj0, features=gs0, maxRank=2000, name=NULL)
+  meta0 <- sobj0@meta.data
+  meta0
+}
+
+meta <- add_score(seurat_obj, gs_list )
+
+write.csv(meta, file="geneset_score.csv")
+
+
