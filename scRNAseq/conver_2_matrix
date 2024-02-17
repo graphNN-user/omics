@@ -1,0 +1,32 @@
+
+
+# the vector (size of 625) converted to a matrix format (25X25)
+
+mydata <- read.csv("geneset_score.csv", header=T, row.names=1) 
+
+# Pairwise correlation between columes  (pathways)
+cols.cor <- cor(mydata, use = "pairwise.complete.obs", method = "pearson")
+
+## column-wise clustering using correlation as distance
+hclust.col <- hclust(as.dist(abs(1-cols.cor)))
+library(ggplot2)
+library("ggdendro")
+#ggdendrogram(hclust.col, rotate = TRUE)
+
+genesets <- colnames(mydata)
+cluster_geneset_order <- genesets[hclust.col$order] 
+
+split_vector <- split(cluster_geneset_order, rep(1:25, each = 25 ))
+matrix_list  <- lapply(split_vector, function(x) matrix(x, nrow=5, ncol=5))
+m1 <- do.call(cbind, matrix_list[1:5]   )
+m2 <- do.call(cbind, matrix_list[6:10]  )
+m3 <- do.call(cbind, matrix_list[11:15] )
+m4 <- do.call(cbind, matrix_list[16:20] )
+m5 <- do.call(cbind, matrix_list[21:25] )
+m  <- rbind(m1,m2,m3,m4,m5)
+
+combined_list <- lapply(1:nrow(m), function(i) m[i,, drop=F] )
+final_list    <- unlist(combined_list)
+
+write.csv(final_list, file="matrix_format.csv", row.names=T)
+
