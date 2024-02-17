@@ -1,0 +1,29 @@
+
+source("create_seuratobj.R")
+
+# sobj_list from create_seuratobj.R
+sobj_list2 <- list()
+sample_list   <- list()
+path <- "/Users/liuy39/Research/dead_cell_detect/doublet_consesus"
+
+for (i in 1:length(sobj_list )) {
+
+  s_obj <- sobj_list[[i]]
+  metadata <- s_obj@meta.data
+  orig.ident <- as.character(metadata[1,"orig.ident"])
+  db_file = paste0(path,"/doublet_consensus_",orig.ident,"_.csv")
+  db_meta   <- read.csv(db_file, row.names=1)
+  db_meta2  <- db_meta[,"consensus", drop=F]
+  metadata2 <- merge(metadata, db_meta2, by=0)
+  rownames(metadata2) <- metadata2$Row.names
+  metadata2 <- metadata2[,-1]
+  s_obj@meta.data <- metadata2
+  sobj_list2 <- append(sobj_list2, s_obj)
+  sample_list <- append(sample_list,orig.ident)
+}
+
+merged_seurat <- merge(x = sobj_list2[[1]], y = sobj_list2[2:length(sobj_list2)], add.cell.ids = as.vector(sample_list))
+
+seurat_obj <- subset(merged_seurat, subset = (consensus == "singlet_consesus") & (nFeature_RNA  >= 500) & (nFeature_RNA  <= 3000) & mitoRatio < 0.15)
+
+
