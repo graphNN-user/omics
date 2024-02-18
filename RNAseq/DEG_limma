@@ -1,5 +1,81 @@
 
+library(dplyr)
 library(edgeR)
+library(ggplot2)
 
-counts <- read.delim("all_counts.txt", row.names = 1)
-head(counts)
+data_dir    <- "/Users/liuy39/Research/TAN12959/rnaseqc_out/"
+files   <- list.files(data_dir, pattern="gene_reads.gct")
+sample0 <- basename(files)
+samples <- unlist(lapply(strsplit(sample0, "_"), '[[', 2))
+samples <- gsub("Aligned","", samples)
+
+mylist <- list()
+
+for (i in c(1:length(files ))) {
+  exprM <- read.table(paste0(data_dir, files[[i]]),sep="\t",header=T,row.names=1,skip=2)
+  exprM <- exprM[,-1, drop=F]
+  colnames(exprM) <- samples[[i]]
+  mylist[[i]] = exprM
+}
+df0 <- do.call("cbind",mylist) #combine all vectors into a matrix
+
+genes   <- read.table(paste0(data_dir,"rowname_gene_id.txt"), sep="\t", header=T, row.names=1)
+genes   <- genes[,1, drop=F]
+exprM   <- cbind(genes, df0)
+exprMax <- aggregate(. ~ Description, data = exprM, max)
+rownames(exprMax) <- exprMax$Description
+exprMax <- exprMax[,-1]
+exprMax <- exprMax[rowSums(exprMax) > 0, ]
+
+exprMlog <- log10(exprMax + 1)
+boxplot(exprMlog)
+
+meta <- read.table("metadata2.txt", header=T, sep="\t")
+info1 <- dplyr::select(meta, id, RIN, exonrate, pairid, status, kd_status)
+rownames(info1) <- info1$id
+info1_NonIBD <- info1[ info1$status == "UC",]
+info2 <- info1_NonIBD
+df2   <- exprMlog[,rownames(info2)]
+
+d0 <- DGEList(df2)
+d0 <- calcNormFactors(d0) 
+cutoff <- 10
+drop <- which(apply(cpm(d0), 1, max) < cutoff)
+d    <- d0[-drop,]
+
+info2$combined <- paste0(info2$status, "_", info2$kd_status)
+pairid    <- factor(info2$pairid )
+combined  <- factor(info2$combined )
+RIN <-    info2$RIN
+exonrate <- info2$exonrate
+
+design <- model.matrix(~ 0 + combined + exonrate + RIN + pairid )
+y <- voom(d, design, plot=T)
+
+fit <- lmFit(y, design) 
+head(coef(fit))
+
+# boxplot
+boxplot_fun <- function(targetgene) {
+  expr      <- exprMlog 
+#  gene1     <- "ENSMUSG00000064368.1"
+  gene1     <- targetgene
+  gene1_df  <- expr[rownames(expr) == gene1,,drop=F]
+  gene1_dft <- t(gene1_df)
+  colnames(gene1_dft) <- "genename"
+  gene1_dft2 <- merge(gene1_dft, info2, by=0)
+  ggplot(gene1_dft2, aes(x=kd_status,y=genename,fill=combined)) + geom_boxplot() + ggtitle(targetgene) + theme(axis.text.x = element_text(angle = 45))
+}  
+
+contr <- makeContrasts(combinedUC_induced - combinedUC_noninduced, levels=colnames(design))
+tmp <- contrasts.fit(fit, contr)
+tmp <- eBayes(tmp)
+top.table <- topTable(tmp, sort.by = "P", n= Inf)
+head(top.table, 10)
+
+p1 <- boxplot_fun("STARD10")
+p1 <- boxplot_fun("RNA5SP123")
+
+write.csv(top.table, file="limma_UC_induced_vs_noninduced_reads.csv",row.names=T)
+
+
