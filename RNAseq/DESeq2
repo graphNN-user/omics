@@ -1,2 +1,55 @@
 
+library(ggplot2)
+library(preprocessCore)
+library(ggfortify)
 library(DESeq2)
+library(edgeR)
+library(dplyr)
+
+data_dir    <- "/Users/liuy39/Research/TAN12959/rnaseqc_out/"
+files   <- list.files(data_dir, pattern="gene_reads.gct")
+sample0 <- basename(files) 
+samples <- unlist(lapply(strsplit(sample0, "_"), '[[', 2)) 
+samples <- gsub("Aligned","", samples)
+
+mylist <- list()
+
+for (i in c(1:length(files ))) { 
+  exprM <- read.table(paste0(data_dir, files[[i]]),sep="\t",header=T,row.names=1,skip=2)
+  exprM <- exprM[,-1, drop=F]
+  colnames(exprM) <- samples[[i]]
+  mylist[[i]] = exprM
+}
+df <- do.call("cbind",mylist) #combine all vectors into a matrix
+
+genes   <- read.table(paste0(data_dir,"rowname_gene_id.txt"), sep="\t", header=T, row.names=1)
+genes   <- genes[,1, drop=F]
+exprM   <- cbind(genes, df)
+exprMax <- aggregate(. ~ Description, data = exprM, max) 
+rownames(exprMax) <- exprMax$Description
+exprMax <- exprMax[,-1]
+exprMax <- exprMax[rowSums(exprMax) > 0, ]
+exprMax$gene <- rownames(exprMax)
+
+meta <- read.table("metadata1.txt", header=T, sep="\t")
+meta_nonIBD <- meta[meta$status == "NonIBD", c("id","pairid","kd_status","status")]
+count_nonIBD <- exprMax[, c("gene",meta_nonIBD$id)]
+
+dds <- DESeqDataSetFromMatrix(countData=count_nonIBD, colData=meta_nonIBD, design=~pairid + kd_status, tidy=TRUE) 
+dds <- DESeq(dds)
+res <- results(dds)
+res_df <- as.data.frame(res)
+write.csv(res_df[order(res_df$pvalue),], file="deseq2_res_nonIBD.csv")
+
+meta_UC <- meta[meta$status == "UC", c("id","pairid","kd_status","status")]
+count_UC <- exprMax[, c("gene",meta_UC$id)]
+
+dds <- DESeqDataSetFromMatrix(countData=count_UC, colData=meta_UC, design=~pairid + kd_status, tidy=TRUE)
+dds <- DESeq(dds)
+res <- results(dds)
+res_df <- as.data.frame(res)
+write.csv(res_df[order(res_df$pvalue),], file="deseq2_res_UC.csv")
+
+
+
+
