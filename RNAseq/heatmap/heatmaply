@@ -1,0 +1,71 @@
+
+library(heatmaply)
+library(dplyr)
+
+cal_z_score <- function(x){ (x - mean(x)) / sd(x) }
+subset_order <- c("subset_0_water(M_neg_C_neg_L_neg)","subset_2_water(M_pos_C_pos_L_pos)","subset_3_water(M_pos_C_pos_L_neg)","subset_4_water(M_pos_C_neg_L_neg)","subset_1_DSS(M_neg_C_pos_L_neg)","subset_2_DSS(M_pos_C_pos_L_pos)","subset_3_DSS(M_pos_C_pos_L_neg)","subset_4_DSS(M_pos_C_neg_L_neg)")
+
+exprM1 <- read.csv("./MB_MM_normalized_count_w_annotaion.csv", header=T, row.names=1, check.names=F)
+#rownames(exprM1) <- sapply(strsplit(rownames(exprM1), "\\."), "[[", 1)
+#gene_map <- read.csv("Gene_map.csv", header=T, row.names=1)
+#colnames(gene_map) <- "Symbol"
+#exprM2 <- merge(gene_map, exprM1, by=0)
+exprM2 <- exprM1
+
+ann <- read.csv("sample_annotation2b.csv", header=T, row.names=1)
+ann$SampleId <- rownames(ann)
+
+get_df <- function(filename, exprMin=exprM2, annin=ann) {
+  test <- read.csv(filename, header=T)
+  genelist <- test[,1]
+  exprM0 <- exprMin[ exprMin$Symbol %in% genelist,]
+  rownames(exprM0) <- exprM0$Symbol
+  exprM0 <- exprM0[,-1]
+  exprM0 <- exprM0[genelist,]
+  exprM0_t <- as.data.frame(t(exprM0))
+  df <- merge(annin, exprM0_t, by=0)
+  rownames(df) <- df$Row.names
+  df
+}
+
+get_final_df <- function(genelistin, dfin, annin=ann){
+  df_res <- data.frame(subset2 = unique(annin$subset2) )
+  for (gene in genelistin) { 
+     df2 <- data.frame(SampleId = rownames(dfin))
+     df2[gene] <- df[,gene]
+     colnames(df2) <- c("SampleId","gene")
+     df3 <- merge(df2, annin, by="SampleId")
+     mean_gene <- summarise(group_by(df3, subset2), mean_gene=mean(gene))
+     mean_gene <- as.data.frame(mean_gene)
+     colnames(mean_gene) <- c("subset2", gene)
+     df_res <- merge(df_res, mean_gene, by="subset2") 
+  }
+  rownames(df_res) <- df_res$subset2
+  df_res <- df_res[,-1]
+  df_res_t <- as.data.frame(t(df_res))
+  df_res_t <- t(apply(df_res_t, 1, cal_z_score))
+  df_res_t <- na.omit(df_res_t)
+  df_res_t
+}
+
+myRes = data.frame(matrix(nrow = 0, ncol = length(subset_order))) 
+colnames(myRes) = subset_order
+
+for (f in c("f_Microglia.csv", "g_Apoptotic_inf_cytokines_Monocyte-derived_vs_embyonic_Mfs.csv")) {
+  print(f)
+  df <- get_df(f, exprM2, ann)
+  #head(df)
+  genelist2 <- colnames(df[,7:dim(df)[[2]]])
+  df_res2 <- get_final_df(genelist2, df, ann)
+  myRes <- rbind(myRes, df_res2[,subset_order])
+}
+
+heatmaply(myRes,colors=cool_warm,dendrogram="none",plot_method="ggplot",fontsize_row = 8)  
+
+myRes2 <- select(myRes, -subset_0_Tap)
+
+heatmaply(myRes2,colors=cool_warm,dendrogram="none",plot_method="ggplot",fontsize_row = 8)
+
+
+
+
