@@ -1,0 +1,48 @@
+
+
+library(dplyr)
+library(variancePartition)
+
+
+data_dir    <- "/Users/liuy39/Research/TAN12959/rnaseqc_out/"
+files   <- list.files(data_dir, pattern="gene_tpm.gct")
+sample0 <- basename(files)
+samples <- unlist(lapply(strsplit(sample0, "_"), '[[', 2))
+samples <- gsub("Aligned","", samples)
+
+mylist <- list()
+
+for (i in c(1:length(files ))) {
+  exprM <- read.table(paste0(data_dir, files[[i]]),sep="\t",header=T,row.names=1,skip=2)
+  exprM <- exprM[,-1, drop=F]
+  colnames(exprM) <- samples[[i]]
+  mylist[[i]] = exprM
+}
+df <- do.call("cbind",mylist) #combine all vectors into a matrix
+
+genes   <- read.table(paste0(data_dir,"rowname_gene_id.txt"), sep="\t", header=T, row.names=1)
+genes   <- genes[,1, drop=F]
+exprM   <- cbind(genes, df)
+exprMax <- aggregate(. ~ Description, data = exprM, max) 
+rownames(exprMax) <- exprMax$Description
+exprMax <- exprMax[,-1]
+exprMax <- exprMax[rowSums(exprMax) > 0, ]
+
+exprMlog <- log10(exprMax + 1)
+boxplot(exprMlog)
+
+meta <- read.table("metadata2.txt", header=T, sep="\t")
+info1 <- dplyr::select(meta, id, RIN, exonrate, pairid, status, kd_status)
+rownames(info1) <- info1$id
+
+form <- ~ RIN + exonrate + (1|pairid) + (1|status) + (1|kd_status)
+varPart <- fitExtractVarPartModel(exprMlog, form, info1) 
+vp <- sortCols( varPart )
+pdf("varpart.pdf")
+plotVarPart( vp )
+dev.off()
+
+
+
+
+
